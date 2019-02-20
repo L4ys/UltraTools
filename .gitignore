@@ -1,0 +1,12 @@
+*.opensdf
+*.sdf
+*.ipch
+*.pch
+*.db
+*.pch
+*.tlog
+*.log
+*.pdb
+*.idb
+/MyComEop_NoQueue/ipch/mycomeop-8e6d07b7/*.ipch
+/UltraAnalyzer/x64/Debug/*.exp
