@@ -7,6 +7,6 @@
 
 ![含高清视频](https://gitee.com/cbwang505/UltraTools/raw/master/findstruct.gif)
 
-[https://gitee.com/cbwang505/UltraTools/raw/master/findstruct.mp4](https://gitee.com/cbwang505/UltraTools/raw/master/findstruct.mp4 "查看视频")
+[https://gitee.com/cbwang505/UltraTools/raw/master/findstruct.mp4](查看视频)
 
 
