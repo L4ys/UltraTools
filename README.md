@@ -11,9 +11,10 @@ IDA Pro 自动查找结构插件
 ;UltraTools       UltraTools        Ctrl+Shift+P 0  WIN
 ;UltraTools64       UltraTools64        Ctrl+Shift+P 0  WIN
 ```
-#### 编译环境
+#### 环境配置
 
-Visual Studio 2013
+1.运行环境 IDA Pro 7.0 
+2.编译环境 Visual Studio 2013
 
 #### 效果
 
