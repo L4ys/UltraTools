@@ -17,7 +17,7 @@ IDA Pro 自动查找结构插件
 2.编译环境 Visual Studio 2013
 
 #### 效果
-![点击下方查看高清视频](https://i.imgur.com/AJ74xhq.gif)
+![点击下方查看高清视频](https://i.imgur.com/aIrqXRP.gif)
 
 [查看视频](https://gitee.com/cbwang505/UltraTools/raw/master/findstruct.mp4)
 
