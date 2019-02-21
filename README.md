@@ -19,7 +19,7 @@ IDA Pro 自动查找结构插件
 #### 效果
 ![点击下方查看高清视频](https://i.imgur.com/aIrqXRP.gif)
 
-[查看视频](https://gitee.com/cbwang505/UltraTools/raw/master/findstruct.mp4)
+[查看视频](https://gitee.com/cbwang505/UltraTools/raw/master/findstruct.avi)
 
 #### 引用
 [git地址](https://gitee.com/cbwang505/UltraTools/)
