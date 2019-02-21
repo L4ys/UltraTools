@@ -8,12 +8,18 @@ hexdsp_t *hexdsp = NULL;
 SMARTDEFINECHOOSER(Struct_Chooser_Item);
 SMARTDEFINECHOOSER(Type_Library_Chooser_Item);
 
-static void *  find_deep_members(QVector<Struct_Chooser_Item>* listAllPtr, tinfo_t* parent_tinfo, tinfo_t* target_tinfo)
+static void *  find_deep_members(QVector<Struct_Chooser_Item>* listAllPtr, tinfo_t* parent_tinfo, tinfo_t* target_tinfo, int idx)
 {
 
 	udt_type_data_t udt;
 	udt_type_data_t::iterator it;
-	int i = 0;
+	udt_type_data_t::iterator itRef;
+
+	int szVoid = 32;
+	if (inf.is_64bit())
+	{
+		szVoid = 64;
+	}
 	bool hr = parent_tinfo->get_udt_details(&udt, GTD_NO_LAYOUT);
 	if (hr)
 	{
@@ -24,26 +30,41 @@ static void *  find_deep_members(QVector<Struct_Chooser_Item>* listAllPtr, tinfo
 			{
 				Struct_Chooser_Item item;
 				parent_tinfo->get_final_type_name(&item.name);
-				item.item = parent_tinfo;				
+				item.item = parent_tinfo;
 				item.offset = it->offset;
-				item.desc = it->is_baseclass() ? qstring().sprnt("BaseClass%d", i) : it->name;
-				listAllPtr->push_back(item);
+
+				int q = 0;
+				for (itRef = udt.begin(); itRef != udt.end(); itRef++)
+				{
+					if (itRef->offset >= it->offset + (idx*szVoid))
+					{
+						item.isbaseclass = itRef->is_baseclass();
+						qstring parent_name;
+						itRef->type.get_final_type_name(&parent_name);
+						item.desc = itRef->is_baseclass() ? qstring().sprnt("BaseClass%d_", q) + parent_name : itRef->name;
+						listAllPtr->push_back(item);
+						break;
+					}
+					q++;
+				}
+				break;
+			
 			}
 			else
 			{
 				if (it->type.is_udt())
 				{
-					find_deep_members(listAllPtr, &it->type, target_tinfo);
+					find_deep_members(listAllPtr, &it->type, target_tinfo, idx);
 				}
 
 			}
-			i++;
+
 		}
 	}
 	return 0;
 }
 
-static QVector<Struct_Chooser_Item> find_containing_structures(tinfo_t* target_tinfo, til_t* lib)
+static QVector<Struct_Chooser_Item> find_containing_structures(tinfo_t* target_tinfo, til_t* lib, int idx)
 {
 	QVector<Struct_Chooser_Item> listAll;
 
@@ -60,7 +81,7 @@ static QVector<Struct_Chooser_Item> find_containing_structures(tinfo_t* target_t
 			parent_tinfo->create_typedef(lib, i);
 			if (parent_tinfo->get_size() >= min_struct_size)
 			{
-				find_deep_members(&listAll, parent_tinfo, target_tinfo);
+				find_deep_members(&listAll, parent_tinfo, target_tinfo, idx);
 
 			}
 
@@ -78,7 +99,7 @@ static int idaapi callback(void *, hexrays_event_t event, va_list va)
 	switch (event)
 	{
 	case hxe_populating_popup:
-	{ 
+	{
 		TWidget *widget = va_arg(va, TWidget *);
 		TPopupMenu *popup = va_arg(va, TPopupMenu *);
 		vdui_t &vu = *va_arg(va, vdui_t *);
@@ -87,7 +108,7 @@ static int idaapi callback(void *, hexrays_event_t event, va_list va)
 			if (vu.item.e->op == cot_var)
 			{
 
-				
+
 				attach_action_to_popup(widget, popup, ACTION_NAME);
 
 			}
@@ -95,7 +116,7 @@ static int idaapi callback(void *, hexrays_event_t event, va_list va)
 
 		}
 
-		
+
 
 		break;
 	}
@@ -103,7 +124,7 @@ static int idaapi callback(void *, hexrays_event_t event, va_list va)
 
 	case hxe_maturity:
 	{
-		
+
 		break;
 	}
 	default:
@@ -116,10 +137,11 @@ struct ida_local if_finder_t : public ctree_visitor_t
 	ea_t ea;
 	vdui_t *_vu;
 	cexpr_t* arg_ret;
-
+	QVector<Struct_Chooser_Item> _listStruct;
+	tinfo_t*  _target_tinfo;
+	til_t* _lib;
 	Struct_Chooser_Item _structIt;
-
-	if_finder_t(vdui_t *vu, Struct_Chooser_Item structIt) : ctree_visitor_t(CV_FAST), _structIt(structIt), _vu(vu), ea(vu->tail.loc.ea)
+	if_finder_t(vdui_t *vu, tinfo_t* target_tinfo, til_t* lib) : ctree_visitor_t(CV_FAST), _target_tinfo(target_tinfo), _vu(vu), _lib(lib), ea(vu->tail.loc.ea)
 	{
 
 	}
@@ -158,30 +180,47 @@ struct ida_local if_finder_t : public ctree_visitor_t
 		arg_address->consume_cexpr(cpyexp);
 
 		tinfo_t* info_typeVoid = new tinfo_t(BT_VOID);
-		info_typeVoid->create_ptr(*info_typeVoid);			
-		
+		info_typeVoid->create_ptr(*info_typeVoid);	
+
 		qstring parent_name;
 		parent_tinfo->get_final_type_name(&parent_name);
-		carg_t*	arg_type = new carg_t();		
-		cexpr_t*	cexpr_arg = create_helper(false, *info_typeVoid, parent_name.c_str());
+		carg_t*	arg_type = new carg_t();
+		cexpr_t*	cexpr_arg = create_helper(true, *parent_tinfo, parent_name.c_str());		
 		arg_type->consume_cexpr(cexpr_arg);
-		
 		carg_t*	arg_field = new  carg_t();
-		cexpr_t* cexpr_field = create_helper(true, *info_typeVoid, _structIt.desc.c_str());
-		arg_field->consume_cexpr(cexpr_field);
+		
+		if (_structIt.isbaseclass)
+		{
+			tinfo_t* parent_tinfo_Ref = new tinfo_t(*parent_tinfo);
+			parent_tinfo_Ref->create_ptr(*parent_tinfo_Ref);
+			qstring FullName = qstring("root->") + _structIt.desc;
+			cexpr_t* expVar = create_helper(true, *parent_tinfo_Ref, FullName.c_str());		
+			arg_field->consume_cexpr(expVar);
+
+		} else
+		{
+			tinfo_t* parent_tinfo_Ref = new tinfo_t(*parent_tinfo);
+			parent_tinfo_Ref->create_ptr(*parent_tinfo_Ref);
+			cexpr_t* expVar = create_helper(true, *parent_tinfo_Ref, "root");			
+			cexpr_t* expPtr = new cexpr_t(cot_memptr, expVar);		
+			cexpr_t*expPtrHelp = new cexpr_t(*expPtr);
+			expPtr->v.idx = (offsetVal + (idx*szVoid)) / szVoid;
+			arg_field->consume_cexpr(expPtrHelp);
+		}	
+		//cexpr_t* cexpr_field = create_helper(true, *info_typeVoid, _structIt.desc.c_str());		
 		carglist_t arglist;
 		arglist.push_back(*arg_address);
 		arglist.push_back(*arg_type);
 		arglist.push_back(*arg_field);
 
-		
+
 		cexpr_t* arg_ret = call_helper(*info_typeFake, nullptr, "CONTAINING_RECORD");
 		arg_ret->a->push_back(*arg_address);
 		arg_ret->a->push_back(*arg_type);
-		arg_ret->a->push_back(*arg_field);		
-		
+		arg_ret->a->push_back(*arg_field);
 
-		
+
+
 		return *arg_ret;
 	}
 
@@ -207,7 +246,31 @@ struct ida_local if_finder_t : public ctree_visitor_t
 		return nullptr;
 	}
 
-	
+
+	int  findChildIndex(cexpr_t *i)
+	{
+		if (i->op == cot_memref)
+		{
+			if (i->x->op == cot_idx)
+			{
+				if (i->x->x->op == cot_var)
+				{
+					tinfo_t ntp(BT_INT);
+					int idx = i->x->y->n->value(ntp);
+					return  idx;
+
+				}
+				else
+				{
+					return findChildIndex(i->x->x);
+				}
+			}
+
+		}
+
+		return 0;
+	}
+
 	void auto_fix_expr(cexpr_t *i, cexpr_t arg_ret)
 	{
 		insn_t ins;
@@ -226,9 +289,9 @@ struct ida_local if_finder_t : public ctree_visitor_t
 			it = udt.begin();
 			//it->type.create_ptr(arg_ret.type);
 			cexpr_t* expRef = new cexpr_t(cot_memref, &arg_ret);
-			expRef->type = it->type;			
+			expRef->type = it->type;
 			tinfo_t* info_typeRef = new tinfo_t(it->type);
-			info_typeRef->remove_ptr_or_array();			
+			info_typeRef->remove_ptr_or_array();
 			udt_type_data_t udtRef;
 			udt_type_data_t::iterator itRef;
 			hr = info_typeRef->get_udt_details(&udtRef, GTD_NO_LAYOUT);
@@ -238,11 +301,11 @@ struct ida_local if_finder_t : public ctree_visitor_t
 				{
 					if (itRef->offset / 8 >= offIdx)
 					{
-						cexpr_t* expPtr = new cexpr_t(cot_memptr, expRef);					
+						cexpr_t* expPtr = new cexpr_t(cot_memptr, expRef);
 						//itRef->type.create_ptr(it->type);
 						expPtr->type = itRef->type;
 						expPtr->v.idx = offIdx;
-						i->assign(*expPtr);					
+						i->assign(*expPtr);
 
 						break;
 					}
@@ -255,19 +318,11 @@ struct ida_local if_finder_t : public ctree_visitor_t
 
 	}
 
-	void ptr_fix_expr(cexpr_t *i)
-	{
-		insn_t ins;
-		decode_insn(&ins, i->ea);		
-		uint offIdx = ins.ops[1].addr;
-		i->y->v.idx = offIdx + _structIt.offset / 8;
-		//i->calc_type(true);
 
-	}
 	int idaapi visit_expr(cexpr_t *i)
 	{
 
-		
+
 		cexpr_t arg_ret;
 		if (i->ea == ea)
 		{
@@ -275,16 +330,30 @@ struct ida_local if_finder_t : public ctree_visitor_t
 
 			if (i->op == cot_memref)
 			{
-				cexpr_t * foundExp = findChildExp(i);
-				if (foundExp != nullptr)
+				char * title_Struct = "Type_Library_Struct";
+				int idx = findChildIndex(i);
+				_listStruct = find_containing_structures(_target_tinfo, _lib, idx);
+				if (!_listStruct.empty())
 				{
-					arg_ret = marshalExp(foundExp);
+					Struct_Chooser_Item_Chooser* chrStruct = new  Struct_Chooser_Item_Chooser(&_listStruct, title_Struct);
+					ssize_t sctidx = chrStruct->choose();
 
-					auto_fix_expr(i, arg_ret);
+					if (sctidx != -1)
+					{
+
+						_structIt = _listStruct[sctidx];
+						cexpr_t * foundExp = findChildExp(i);
+						if (foundExp != nullptr)
+						{
+							arg_ret = marshalExp(foundExp);
+
+							auto_fix_expr(i, arg_ret);
+						}
+						return 0;
+					}
 				}
-				return 0; 
 			}
-			
+
 		}
 		return 0;
 	}
@@ -320,25 +389,17 @@ struct find_containing_ah_t : public action_handler_t
 
 			}
 
-			char * title_Struct = "Type_Library_Struct";
-			QVector<Struct_Chooser_Item> listStruct = find_containing_structures(target_tinfo, list_type_library[chsidx].lib);
-			if (!listStruct.empty())
-			{
-				Struct_Chooser_Item_Chooser* chrStruct = new  Struct_Chooser_Item_Chooser(&listStruct, title_Struct);
-				ssize_t sctidx = chrStruct->choose();
 
-				if (sctidx != -1)
-				{
-					
 
-					if_finder_t iff(&vu, listStruct[sctidx]);
-					iff.apply_to(&vu.cfunc->body, NULL);
+
+			if_finder_t iff(&vu, target_tinfo, list_type_library[chsidx].lib);
+			iff.apply_to(&vu.cfunc->body, NULL);
 
 
 
 
-				}
-			}
+
+
 
 		}
 		vu.refresh_ctext();

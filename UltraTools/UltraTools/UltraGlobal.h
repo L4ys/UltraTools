@@ -38,5 +38,6 @@ typedef struct  Struct_Chooser_Item{
 	qstring name;
 	qstring desc;
 	uint64 offset;
+	bool isbaseclass;
 } *Struct_Chooser_Item_Ptr;
 
